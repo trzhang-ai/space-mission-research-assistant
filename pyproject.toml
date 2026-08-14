@@ -1,7 +1,7 @@
 [project]
-name = "project-nasa-mission-intelligence-starter"
+name = "nasa-mission-rag"
 version = "0.1.0"
-description = "NASA mission intelligence RAG learning project"
+description = "Source-grounded RAG system for NASA mission archives with retrieval and evaluation"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 

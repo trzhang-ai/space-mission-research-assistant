@@ -1,11 +1,14 @@
 # NASA Mission Intelligence RAG
 
-This project implements a complete Retrieval-Augmented Generation (RAG)
-workflow for NASA mission documents about Apollo 11, Apollo 13, and
-Challenger. It extends the Udacity starter project with a reproducible Python
-environment, conservative OCR and transcript cleaning, configurable
-token-based chunking, persistent OpenAI embeddings in ChromaDB, grounded chat,
-and real-time and batch RAGAS evaluation.
+A source-grounded Retrieval-Augmented Generation (RAG) system for mission
+archives covering Apollo 11, Apollo 13, and Challenger. It combines
+conservative OCR and transcript cleaning, configurable token-based chunking,
+persistent OpenAI embeddings in ChromaDB, cited answer generation, and both
+real-time and batch RAGAS evaluation.
+
+The saved evaluation baseline covers 5,584 chunks from 12 source files and 17
+questions. It is included as inspectable evidence rather than presented as a
+claim of fully optimized retrieval or production deployment.
 
 The source corpus contains OCR artifacts, page furniture, tables, charts, and
 transcript formatting that are not all useful as retrieval text. The data
@@ -39,7 +42,7 @@ test_questions.json
     -> JSON evaluation report
 ```
 
-## Rubric coverage
+## System capabilities
 
 ### Embedding and data pipeline
 
@@ -344,7 +347,16 @@ mixed together.
 - The system prompt requires source citations, but there is not yet a separate
   automatic citation-entailment verifier.
 
-## Original project
+## Attribution and scope
 
-This implementation is based on Udacity's
+This repository began from Udacity's
 [NASA Mission Intelligence starter project](https://github.com/udacity/cd13318-exercises-project/tree/main/Project-NASA-Mission-Intelligence-Starter).
+The implementation substantially extends that scaffold with source-aware text
+cleaning, token-safe chunking, persistent collection update modes, grounded
+retrieval, batch evaluation, automated tests, and reproducible baseline
+evidence. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the
+upstream source and license notice.
+
+This is an independent portfolio implementation. It is not affiliated with or
+endorsed by NASA, and it is not represented as a production NASA system or a
+hosted service.

@@ -310,7 +310,7 @@ class CleanedRecordAggregationTests(unittest.TestCase):
         )
 
 
-class ChunkingRubricTests(unittest.TestCase):
+class ChunkingBehaviorTests(unittest.TestCase):
     def test_runtime_chunk_settings_and_size_limit(self):
         text = " ".join(
             f"Sentence {i} describes a NASA mission event "
@@ -388,7 +388,7 @@ class ChunkingRubricTests(unittest.TestCase):
         self.assertEqual(len(chunks), 2)
 
 
-class CollectionMetadataRubricTests(unittest.TestCase):
+class CollectionMetadataTests(unittest.TestCase):
     def test_stores_required_chunk_metadata(self):
         pipeline = object.__new__(
             ChromaEmbeddingPipelineTextOnly
@@ -443,7 +443,7 @@ class CollectionMetadataRubricTests(unittest.TestCase):
         self.assertEqual(stats["added"], 1)
 
 
-class UpdateModeRubricTests(unittest.TestCase):
+class CollectionUpdateModeTests(unittest.TestCase):
     def setUp(self):
         self.pipeline = object.__new__(
             ChromaEmbeddingPipelineTextOnly
@@ -557,7 +557,7 @@ class UpdateModeRubricTests(unittest.TestCase):
         )
 
 
-class PersistenceAndStatsRubricTests(unittest.TestCase):
+class PersistenceAndStatisticsTests(unittest.TestCase):
     @patch("embedding_pipeline.chromadb.PersistentClient")
     @patch("embedding_pipeline.OpenAIEmbeddingFunction")
     @patch("embedding_pipeline.OpenAI")
@@ -576,16 +576,16 @@ class PersistenceAndStatsRubricTests(unittest.TestCase):
         pipeline = ChromaEmbeddingPipelineTextOnly(
             openai_api_key="test-key",
             openai_base_url="https://example.test/v1",
-            chroma_persist_directory="rubric_chroma",
-            collection_name="rubric_collection",
+            chroma_persist_directory="test_chroma",
+            collection_name="test_collection",
             embedding_model="test-embedding-model",
         )
 
         mocked_persistent_client_class.assert_called_once_with(
-            path="rubric_chroma"
+            path="test_chroma"
         )
         mocked_client.get_or_create_collection.assert_called_once_with(
-            name="rubric_collection",
+            name="test_collection",
             embedding_function=(
                 mocked_embedding_function_class.return_value
             ),
