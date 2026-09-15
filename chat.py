@@ -25,7 +25,7 @@ RAGAS_AVAILABLE = ragas_evaluator.RAGAS_AVAILABLE
 
 # Page configuration
 st.set_page_config(
-    page_title="NASA RAG Chat with Evaluation",
+    page_title="Space Mission Research Assistant",
     page_icon="🚀",
     layout="wide"
 )
@@ -137,8 +137,8 @@ def display_evaluation_metrics(
         )
 
 def main():
-    st.title("🚀 NASA Space Mission Chat with Evaluation")
-    st.markdown("Chat with AI about NASA space missions with real-time quality evaluation")
+    st.title("Space Mission Research Assistant")
+    st.markdown("Ask questions about mission reports and transcripts, with cited answers and quality evaluation.")
     # Initialize session state
     if "messages" not in st.session_state:
         st.session_state.messages = []

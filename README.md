@@ -1,4 +1,7 @@
-# NASA Mission Intelligence RAG
+# Space Mission Research Assistant
+
+Ask questions about NASA mission reports and transcripts and inspect the
+sources behind each answer. This independent project is not affiliated with NASA.
 
 A source-grounded Retrieval-Augmented Generation (RAG) system for mission
 archives covering Apollo 11, Apollo 13, and Challenger. It combines
