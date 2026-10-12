@@ -1,365 +1,113 @@
 # Space Mission Research Assistant
 
-Ask questions about NASA mission reports and transcripts and inspect the
-sources behind each answer. This independent project is not affiliated with NASA.
+Ask questions about NASA mission reports and transcripts, and get answers that
+cite the source passages they rely on.
 
-A source-grounded Retrieval-Augmented Generation (RAG) system for mission
-archives covering Apollo 11, Apollo 13, and Challenger. It combines
-conservative OCR and transcript cleaning, configurable token-based chunking,
-persistent OpenAI embeddings in ChromaDB, cited answer generation, and both
-real-time and batch RAGAS evaluation.
+| | |
+|---|---|
+| **Problem** | Mission archives are long and noisy: OCR errors, page furniture, tables, and transcript formatting make them hard to search and easy to misquote. |
+| **Approach** | Source-aware cleaning, token-based chunking, embeddings in a persistent vector database, and answers that must cite retrieved evidence, with automated quality evaluation. |
+| **Results** | 5,584 chunks indexed from 12 Apollo 11, Apollo 13, and Challenger sources. On a 17-question benchmark, faithfulness is 0.82 and answer relevancy 0.78; retrieval completeness (recall 0.50) is the identified improvement target. |
+| **Stack** | Python · OpenAI embeddings and chat models · ChromaDB · RAGAS · Streamlit · pytest (108 tests) · GitHub Actions · uv |
 
-The saved evaluation baseline covers 5,584 chunks from 12 source files and 17
-questions. It is included as inspectable evidence rather than presented as a
-claim of fully optimized retrieval or production deployment.
+## How it works
 
-The source corpus contains OCR artifacts, page furniture, tables, charts, and
-transcript formatting that are not all useful as retrieval text. The data
-pipeline therefore cleans each source while preserving useful narrative
-content and provenance before creating embeddings.
-
-## Architecture
-
-```text
-Ingestion
-data_text/
-    -> nasa_text_cleaners.py
-       cleaned semantic records + source metadata
-    -> embedding_pipeline.py
-       aggregate by source file -> token chunks -> OpenAI embeddings
-    -> persistent ChromaDB collection
-
-Interactive workflow
-chat.py
-    -> rag_client.py
-       semantic top-k retrieval -> deduplicated, source-attributed context
-    -> llm_client.py
-       grounded prompt + conversation history -> answer
-    -> ragas_evaluator.py
-       real-time metrics
-
-Independent batch workflow
-test_questions.json
-    -> batch_evaluation.py
-       retrieval -> generation -> reference-based RAGAS metrics
-    -> JSON evaluation report
+```mermaid
+flowchart LR
+    A[Mission reports<br/>and transcripts] --> B[Source-aware<br/>cleaning]
+    B --> C[Token chunks<br/>with metadata]
+    C --> D[(ChromaDB<br/>embeddings)]
+    Q[User question] --> R[Retrieve and<br/>deduplicate]
+    D --> R
+    R --> G[Answer with<br/>citations]
+    G --> E[Quality metrics<br/>RAGAS]
 ```
 
-## System capabilities
+1. **Clean** each source with rules suited to its format, keeping narrative text
+   and provenance while dropping OCR noise and unusable tables.
+2. **Chunk and embed** the cleaned text into a persistent ChromaDB collection,
+   with mission, source, and file metadata on every chunk.
+3. **Retrieve** the most relevant passages, optionally filtered by mission, and
+   deduplicate them.
+4. **Answer** with a prompt that requires citations and explicit uncertainty
+   when the evidence is insufficient.
+5. **Evaluate** answers in real time in the chat app, or across a benchmark set
+   in batch.
 
-### Embedding and data pipeline
+## Key design decisions
 
-- `chunk_size` and `chunk_overlap` are configurable at runtime.
-- Every chunk is checked against the configured token limit.
-- Consecutive chunks use consistent overlap.
-- OpenAI embeddings are generated for every stored chunk.
-- Every chunk carries metadata including mission, source, and filepath.
-- Existing documents support `skip`, `update`, and `replace` update modes.
-- ChromaDB persistence directory and collection name are configurable.
-- `--stats-only` reports the collection name, stored chunk/document count,
-  source-file count, and mission/type aggregates.
+- **Clean before chunking.** Embeddings cannot separate meaningful text from
+  OCR artifacts once they are mixed, so cleaning happens first and is tailored
+  to each source type rather than applied as one generic pass.
+- **Chunk within each source file.** Overlap never crosses file boundaries, so
+  every retrieved passage traces back to a single document.
+- **Synchronize instead of append.** A `replace` update mode upserts current
+  chunks and deletes stale ones, so changing the cleaning or chunking rules
+  never leaves outdated text in the index.
+- **Ground every answer.** Retrieved context is supplied only for the current
+  question, answers must cite it, and the model is told to state uncertainty
+  rather than fill gaps from general knowledge.
+- **Fail per metric, not per run.** A failed evaluation metric is recorded as a
+  structured error while the remaining metrics and questions continue.
 
-### Retrieval and LLM integration
+## Results
 
-- Questions are embedded and queried against the persistent ChromaDB
-  collection.
-- Retrieval `top_k` is configurable, with optional mission metadata filtering.
-- Results are ranked, deduplicated, and formatted with clear source
-  attribution.
-- The NASA expert prompt requires citations, reliance on retrieved evidence,
-  and explicit uncertainty when the evidence is insufficient.
-- Conversation history is maintained as role/content turns while retrieved
-  context is supplied only for the current request.
+The 2026-07-28 benchmark run completed all 17 questions with no failures.
 
-### Evaluation
+| Metric | Mean | What it shows |
+|---|---:|---|
+| Faithfulness | 0.82 | Most answer claims are supported by the retrieved evidence. |
+| Response relevancy | 0.78 | Answers generally address the question asked. |
+| Context precision | 0.56 | Useful evidence is only moderately concentrated at the top of the ranking. |
+| Context recall | 0.50 | Retrieval covers about half of the reference-answer claims. |
+| Factual correctness | 0.30 | Answers align weakly with the reference answers overall. |
 
-- Interactive evaluation measures response relevancy and faithfulness.
-- Reference-based batch evaluation also measures context precision, context
-  recall, factual correctness, and derived retrieval F1.
-- The batch workflow loads the supplied test set, evaluates each question, and
-  writes both per-question results and aggregate means.
-- Malformed inputs and individual metric failures return structured errors
-  instead of terminating the whole evaluation run.
+Answers are well grounded in what is retrieved, but retrieval is incomplete, so
+the next improvement is retrieving more complete, reference-relevant evidence.
+Full per-question results are in
+[`evaluation_results_2026-07-28.json`](evaluation_results_2026-07-28.json), and
+the [evaluation guide](docs/evaluation.md) explains each metric.
 
-## Project structure
+## Limitations
 
-```text
-.
-├── data_text/                  # NASA OCR and transcript source files
-├── tests/                      # Unit and integration-oriented tests
-├── nasa_text_cleaners.py       # Source-aware OCR/transcript cleaning
-├── embedding_pipeline.py       # Chunking, embedding, ChromaDB persistence, CLI
-├── rag_client.py               # Semantic retrieval and context construction
-├── llm_client.py               # Grounded OpenAI response generation
-├── ragas_evaluator.py          # Async RAGAS metric evaluation
-├── chat.py                     # Streamlit chat interface
-├── batch_evaluation.py         # End-to-end test-set evaluation CLI
-├── test_questions.json         # 17 mission questions with reference answers
-├── evaluation_results_2026-07-28.json
-│                                # Reproducible full-evaluation evidence
-├── nasa_rag_reference.ipynb    # Offline reference walkthrough
-├── pyproject.toml              # Project metadata and dependencies
-└── uv.lock                     # Locked dependency versions
-```
+- Conservative cleaning cannot remove every OCR or speech-recognition error
+  without risking the loss of useful content.
+- Exact-text deduplication does not catch every near-duplicate passage.
+- Model-based evaluation is stochastic, and live runs incur API cost.
+- Answers must cite sources, but no separate verifier yet checks that each
+  citation supports its claim.
 
-## Requirements and installation
+## Running locally
 
-- Python 3.12
-- [`uv`](https://docs.astral.sh/uv/)
-- An OpenAI-compatible API endpoint and API key
-
-Install the locked environment:
+Requires Python 3.12, [uv](https://docs.astral.sh/uv/), and an OpenAI-compatible
+API key in a local `.env` file (`OPENAI_API_KEY`, optionally `OPENAI_BASE_URL`).
 
 ```bash
 uv sync
-```
-
-`uv sync` creates or updates `.venv` and installs the exact dependency set
-recorded in `uv.lock`, including the development test dependencies.
-
-Create a local `.env` file:
-
-```dotenv
-OPENAI_API_KEY=your_api_key
-OPENAI_BASE_URL=your_compatible_endpoint
-```
-
-`OPENAI_BASE_URL` is optional when using the standard OpenAI endpoint. For the
-Streamlit app, the following optional environment variables override the
-default generation and judge models:
-
-```dotenv
-OPENAI_CHAT_MODEL=gpt-5.4-nano
-OPENAI_EVALUATOR_MODEL=gpt-5.4-mini
-```
-
-The batch workflow instead uses the explicit `--generator-model` and
-`--evaluator-model` CLI flags shown below.
-
-Do not commit `.env`; it is ignored by Git.
-
-## 1. Test the implementation
-
-```bash
 uv run python -m pytest -q
-```
-
-This runs the complete test suite inside the locked project environment.
-
-## 2. Build or update the vector collection
-
-```bash
-uv run python embedding_pipeline.py \
-  --data-path data_text \
-  --chroma-dir ./chroma_db_openai \
-  --collection-name nasa_space_missions_text \
-  --embedding-model text-embedding-3-small \
-  --chunk-size 500 \
-  --chunk-overlap 100 \
-  --batch-size 50 \
-  --update-mode replace
-```
-
-The important runtime options are:
-
-| Option | Meaning |
-|---|---|
-| `--chunk-size` | Maximum number of tokens allowed in a chunk |
-| `--chunk-overlap` | Target number of repeated tokens between neighboring chunks |
-| `--batch-size` | Number of chunks sent in one embedding/storage batch |
-| `--update-mode skip` | Embed only chunk IDs not already in the collection |
-| `--update-mode update` | Add new IDs and overwrite matching existing IDs |
-| `--update-mode replace` | Synchronize each source by upserting current chunks and deleting stale chunks |
-
-Use `replace` after cleaning or chunking rules change, because the new chunk set
-may no longer have the same IDs as the old set. Use `skip` for a safe,
-incremental rerun when the source and chunking configuration have not changed.
-
-To inspect an existing collection without rebuilding it:
-
-```bash
-uv run python embedding_pipeline.py \
-  --chroma-dir ./chroma_db_openai \
-  --collection-name nasa_space_missions_text \
-  --stats-only
-```
-
-Initialization still validates the API configuration, but `--stats-only` does
-not create new embeddings.
-
-## 3. Run the chat application
-
-```bash
+uv run python embedding_pipeline.py --data-path data_text --update-mode replace
 uv run streamlit run chat.py
 ```
 
-The Streamlit sidebar controls the ChromaDB backend, collection, retrieval
-count, optional mission filter, generator model, and whether evaluation is
-enabled. Generated answers are instructed to cite numbered context documents,
-and the interface displays real-time metrics when evaluation is enabled. The
-evaluator model is configured through `OPENAI_EVALUATOR_MODEL`; a separate
-retrieved-source panel is not currently rendered.
+The [operations guide](docs/operations.md) covers every command and option,
+including the batch evaluation.
 
-## 4. Run the full batch evaluation
+## Repository structure
 
-```bash
-uv run python batch_evaluation.py \
-  --dataset test_questions.json \
-  --chroma-dir ./chroma_db_openai \
-  --collection-name nasa_space_missions_text \
-  --top-k 5 \
-  --generator-model gpt-5.4-nano \
-  --evaluator-model gpt-5.4-mini \
-  --embedding-model text-embedding-3-small \
-  --output evaluation_results.json
+```text
+.
+├── data_text/                  # Mission OCR and transcript source files
+├── docs/                       # Operations, evaluation, and data-cleaning guides
+├── tests/                      # 108 automated tests
+├── nasa_text_cleaners.py       # Source-aware OCR and transcript cleaning
+├── embedding_pipeline.py       # Chunking, embedding, ChromaDB persistence, CLI
+├── rag_client.py               # Retrieval and context construction
+├── llm_client.py               # Grounded answer generation
+├── ragas_evaluator.py          # RAGAS metric evaluation
+├── chat.py                     # Streamlit chat interface
+├── batch_evaluation.py         # Benchmark evaluation CLI
+├── test_questions.json         # 17 questions with reference answers
+└── evaluation_results_2026-07-28.json
 ```
 
-This is a live API workflow: it performs retrieval, answer generation, and
-model-based evaluation for every test question, so it consumes API tokens and
-can take several minutes.
-
-### Metric meanings
-
-| Metric | What it asks |
-|---|---|
-| Response relevancy | Does the answer address the question? |
-| Faithfulness | Are answer claims supported by the retrieved context? |
-| Context precision | How much of the retrieved context is useful for the reference answer? |
-| Context recall | How much of the reference answer is covered by retrieved context? |
-| Factual correctness | How well do answer claims agree with the reference answer? |
-| Retrieval F1 | Harmonic mean of context precision and context recall |
-
-All scores range from 0 to 1, where higher is better, but there is no universal
-pass threshold. Response relevancy compares the question with questions
-reconstructed from the answer. Faithfulness checks whether answer claims are
-supported by retrieved text. Context precision rewards useful chunks appearing
-early in the ranking, while context recall checks whether retrieved text
-contains the claims needed by the reference answer. Factual correctness is
-claim-level F1 between the generated and reference answers. Retrieval F1 is
-this project's harmonic mean of context precision and context recall.
-
-### Concise metric example
-
-Suppose an Apollo 13 question asks what happened to the oxygen and fuel-cell
-systems and what decision followed:
-
-1. The first retrieved chunk describes the tank and fuel-cell failures
-   (`useful`).
-2. The second contains only launch-time information (`not useful`).
-3. The third says the landing was scrubbed and the lunar module became a
-   lifeboat (`useful`).
-
-The answer repeats those supported facts, but the reference also says the
-mission continued as a lunar-flyby abort. Under these simplified judge
-decisions:
-
-- response relevancy would be high because the answer directly addresses the
-  question;
-- faithfulness would be `1.00` if every answer claim is supported;
-- context precision would be `(1 + 2/3) / 2 = 0.833`, because useful chunks
-  occur at ranks 1 and 3;
-- context recall would be `4/5 = 0.80` if four of five reference claims are
-  supported by the retrieved text;
-- factual correctness would be about `0.89` for four matching claims, no false
-  answer claim, and one missing reference claim;
-- retrieval F1 would be approximately `0.816`, the harmonic mean of `0.833`
-  and `0.80`.
-
-These numbers are illustrative, not observed results. RAGAS uses an LLM to
-generate questions, split claims, and make support judgments, so the actual
-decomposition and scores can vary between runs.
-
-RAGAS metrics are model-based and may vary slightly between runs. If one
-metric fails, its value is marked as `NaN` internally and serialized as JSON
-`null` with a metric-specific error, while the remaining metrics and questions
-continue.
-
-## Verified baseline
-
-The local collection used for the baseline contains:
-
-- 5,584 chunks from 12 source files
-- Apollo 11: 2,707 chunks
-- Apollo 13: 2,526 chunks
-- Challenger: 351 chunks
-- 500-token maximum chunk size and 100-token configured overlap
-- 1,536-dimensional `text-embedding-3-small` vectors
-
-The 2026-07-28 full run completed all 17 test questions without a
-question-level failure. Its configuration and complete per-question evidence
-are stored in
-[`evaluation_results_2026-07-28.json`](evaluation_results_2026-07-28.json).
-
-| Metric | Mean |
-|---|---:|
-| Response relevancy | 0.7846 |
-| Faithfulness | 0.8158 |
-| Context precision | 0.5560 |
-| Context recall | 0.5000 |
-| Factual correctness | 0.2953 |
-| Retrieval F1 | 0.4300 |
-
-The metric means answer different questions:
-
-- `0.7846` response relevancy: answers generally address the questions.
-- `0.8158` faithfulness: most generated claims are supported by retrieved
-  evidence.
-- `0.5560` context precision: useful evidence is only moderately concentrated
-  near the top of the retrieval ranking.
-- `0.5000` context recall: retrieval covers only about half of the
-  reference-answer claims under the evaluator's attribution judgments.
-- `0.2953` factual correctness: generated and reference claims align weakly
-  overall, even though answers are usually grounded in what was retrieved.
-- `0.4300` retrieval F1: the combined precision/recall balance is
-  moderate-to-low.
-
-Together, these results suggest that answer grounding is stronger than
-retrieval completeness. The main improvement target is therefore to retrieve
-more complete, reference-relevant evidence and then reduce missing or
-mismatched answer claims. These results are a baseline, not a claim that
-retrieval is fully optimized.
-
-## Data-cleaning approach
-
-`nasa_text_cleaners.py` applies source-aware rules rather than one destructive
-generic cleanup pass. It aims to:
-
-- remove repeated page furniture and obvious OCR noise;
-- preserve readable narrative, transcript turns, and useful technical text;
-- avoid embedding unusable chart or table fragments;
-- retain mission, source type, filepath, page/section information, and raw
-  provenance needed to audit a retrieved chunk.
-
-The cleaners return cleaned report blocks or transcript turns.
-`embedding_pipeline.py` then aggregates those semantic records by source file
-before chunking, so overlap never crosses file boundaries. Cleaning happens
-before chunking because embeddings cannot repair missing content or distinguish
-meaningful text from severe OCR artifacts after the two have already been
-mixed together.
-
-## Known limitations
-
-- Conservative cleaning cannot remove every OCR or ASR error without also
-  risking loss of useful mission content.
-- Exact text deduplication does not remove every near-duplicate passage created
-  by overlap or repeated source material.
-- RAGAS is a model-as-judge evaluation; results are stochastic and live runs
-  incur API cost.
-- Reference-answer metrics are useful diagnostics but are sensitive to the
-  wording and coverage of the supplied references.
-- The system prompt requires source citations, but there is not yet a separate
-  automatic citation-entailment verifier.
-
-## Attribution and scope
-
-This repository began from Udacity's
-[NASA Mission Intelligence starter project](https://github.com/udacity/cd13318-exercises-project/tree/main/Project-NASA-Mission-Intelligence-Starter).
-The implementation substantially extends that scaffold with source-aware text
-cleaning, token-safe chunking, persistent collection update modes, grounded
-retrieval, batch evaluation, automated tests, and reproducible baseline
-evidence. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the
-upstream source and license notice.
-
-This is an independent portfolio implementation. It is not affiliated with or
-endorsed by NASA, and it is not represented as a production NASA system or a
-hosted service.
+Not affiliated with or endorsed by NASA.
